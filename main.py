@@ -52,8 +52,10 @@ def get_batch(split):
 class LanguageModel(nn.Module):
     
     def __init__(self):
+        """
+        Initializes all the necessary layers and modules for the language model.
+        """
         super().__init()
-        # each token directly reads off the logits for the next token from a lookup table
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.ln_f = nn.LayerNorm(n_embd)
@@ -62,9 +64,52 @@ class LanguageModel(nn.Module):
         self.apply(self._init_weights)
     
     def _init_weights(self, module):
+        """
+        Applies a custom weight initialization to Linear and Embedding layers.
+        """
         if isinstance(module, nn.Linear):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            
+    def forward(self, idx, targets=None):
+        """
+        Computes possibilities from token indices and calculates loss if targets are provided.
+        """
+        B, T = idx.shape
+        
+        # idx and targets are both (B,T) tensor of integers
+        tok_emb = self.token_embedding_table(idx) # (B,T,C)
+        pos_emb = self.position_embedding_table(torch.arange(T, device= device)) #(T,C)
+        x = tok_emb + pos_emb
+        x = self.ln_f(x)
+        logits = self.lm_head(x) #(B, T, vocab_size)
+        
+        if targets is None:
+            loss = None
+        else:
+            B, T, C = logits.shape
+            logits = logits.view(B*T, C)
+            targets = targets.view(B*T)
+            loss = F.cross_entropy(logits, targets)
+        
+        return logits, loss
+        
+    
+    def generate(self, idx, max_new_tokens):
+        """
+        Return the whole idx(tensor format) after creating the next token
+        """
+        
+        for _ in range(max_new_tokens):
+            idx_cond = idx[:, -block_size:]
+            logits, loss = self(idx_cond)
+            logits = logits[:, -1, :]
+            probs = F.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.concat((idx, idx_next), dim=1)
+        
+        return idx    
+        
