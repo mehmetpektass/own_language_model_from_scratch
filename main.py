@@ -49,6 +49,7 @@ def get_batch(split):
     return x,y
 
 
+
 class LanguageModel(nn.Module):
     
     def __init__(self):
@@ -111,5 +112,25 @@ class LanguageModel(nn.Module):
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.concat((idx, idx_next), dim=1)
         
-        return idx    
-        
+        return idx
+    
+model = LanguageModel()
+m = model.to(device)
+# print the number of parameters in the model
+print(sum(p.numel() for p in m.parameters()), 'parameters')
+
+
+@torch.no_grad
+def estimate_loss():
+    out = {}
+    model.eval()
+    for split in ["train", "val"]:
+        losses = torch.zeros(eval_iters)
+        for k in range(eval_iters):
+            X,Y = get_batch(split)
+            logits, loss = model(X,Y)
+            losses[k] = loss.item()
+        out[split] = losses.mean()
+    model.train()
+    
+    return out
