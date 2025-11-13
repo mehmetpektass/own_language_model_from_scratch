@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import pickle
 
 #parameters
 batch_size = 64
@@ -186,10 +187,7 @@ class LanguageModel(nn.Module):
         
         return idx
     
-model = LanguageModel()
-m = model.to(device)
-# print the number of parameters in the model
-print(sum(p.numel() for p in m.parameters()), 'parameters')
+
 
 
 @torch.no_grad
@@ -206,3 +204,42 @@ def estimate_loss():
     model.train()
     
     return out
+
+
+if __name__ == "__main__":
+    model = LanguageModel()
+    m = model.to(device)
+    # print the number of parameters in the model
+    print(sum(p.numel() for p in m.parameters()), 'parameters')
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr = learning_rate)
+    
+    for iter in range(max_iters):
+        if iter % eval_interval == 0 or iter == max_iters-1:
+            losses = estimate_loss()
+            print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+        
+        xb, yb = get_batch("train")
+        logits, loss = model(xb, yb)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+    
+    print("--------------------")
+    print("Training Completed!")
+        
+    torch.save(m.state_dict(), "model_weights.pth")
+    print("Model weights saved on 'model_weights.pth' file")
+    
+    meta = {
+        "vocab_size": vocab_size,
+        "itos": itos,
+        "stoi": stoi,
+    }
+    
+    with open("tokenizer_meta.pkl", "wb") as f:
+        pickle.dump(meta, f)
+    print("Tokenizer infos saved on 'tokenizer_meta.pkl' file")
+    
+    context = torch.zeros((1,1), dtype=torch.long, device=device)
+    open("generated_text_by_lm", "w").write(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
