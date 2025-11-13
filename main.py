@@ -14,7 +14,7 @@ eval_iters = 100
 n_embd = 384
 n_head = 3
 n_layer = 3
-droput = 0.2
+dropout = 0.2
 
 
 torch.manual_seed(1362)
@@ -42,7 +42,7 @@ test_data = data[n:]
 
 #get data
 def get_batch(split):
-    data = train_data if split =='train' else 'test'
+    data = train_data if split =='train' else test_data
     ix = torch.randint(len(data) - block_size, (batch_size))
     x = torch.stack([data[i: i+block_size] for i in ix])
     y = torch.stack([data[i+1: i+block_size+1] for i in ix])
@@ -60,7 +60,7 @@ class Head(nn.Module):
         self.value = nn.Linear(n_embd, head_size, bias=False)
         self.register_buffer("tril", torch.tril(torch.ones(block_size, block_size)))
         
-        self.dropout = nn.Dropout(droput)
+        self.dropout = nn.Dropout(dropout)
         
     def forward(self, x):
         B, T, C = x.shape
@@ -68,7 +68,7 @@ class Head(nn.Module):
         q = self.query(x)
         v = self.value(x)
         
-        wei = q @ k.transpose(-2, -1) * k.shape[-1]**0.5
+        wei = q @ k.transpose(-2, -1) * k.shape[-1]**-0.5
         wei = wei.masked_fill(self.tril[:T, :T] == 0, float("-inf"))
         wei = F.softmax(wei, dim = -1)
         wei = self.dropout(wei)
@@ -83,7 +83,7 @@ class MultiHeadAttention(nn.Module):
         super().__init__()
         self.heads = nn.ModuleList([Head(head_size) for _ in range(num_heads)])
         self.proj = nn.Linear(head_size*num_heads, n_embd)
-        self.dropout = nn.Dropout(droput)
+        self.dropout = nn.Dropout(dropout)
     
     def forward(self, x):
         out = torch.cat([h(x) for h in self.heads], dim=-1)
@@ -99,7 +99,7 @@ class FeedFoward(nn.Module):
             nn.Linear(n_embd, 4*n_embd),
             nn.ReLU(),
             nn.Linear(4*n_embd, n_embd),
-            nn.Dropout(droput),
+            nn.Dropout(dropout),
         )
     
     def forward(self, x):
@@ -110,7 +110,7 @@ class Block(nn.Module):
     """ Transformer block: communication followed by computation """
     def __init__(self, n_embd, n_head):
         super().__init__()
-        head_size = n_embd / n_head
+        head_size = n_embd // n_head
         self.sa = MultiHeadAttention(n_head, head_size)
         self.ffwd = FeedFoward(n_embd)
         self.ln1 = nn.LayerNorm(n_embd)
@@ -124,7 +124,7 @@ class Block(nn.Module):
 
 class LanguageModel(nn.Module):
     
-    def __init__(self):
+    def __init__(self, vocab_size, n_embd, block_size, n_head, n_layer):
         """
         Initializes all the necessary layers and modules for the language model.
         """
@@ -158,6 +158,7 @@ class LanguageModel(nn.Module):
         tok_emb = self.token_embedding_table(idx) # (B,T,C)
         pos_emb = self.position_embedding_table(torch.arange(T, device= device)) #(T,C)
         x = tok_emb + pos_emb
+        x = self.blocks(x)
         x = self.ln_f(x)
         logits = self.lm_head(x) #(B, T, vocab_size)
         
@@ -183,14 +184,14 @@ class LanguageModel(nn.Module):
             logits = logits[:, -1, :]
             probs = F.softmax(logits, dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
-            idx = torch.concat((idx, idx_next), dim=1)
+            idx = torch.cat((idx, idx_next), dim=1)
         
         return idx
     
 
 
 
-@torch.no_grad
+@torch.no_grad()
 def estimate_loss():
     out = {}
     model.eval()
@@ -207,7 +208,13 @@ def estimate_loss():
 
 
 if __name__ == "__main__":
-    model = LanguageModel()
+    model = LanguageModel(
+        vocab_size=vocab_size,
+        n_embd=n_embd,
+        block_size=block_size,
+        n_head=n_head,
+        n_layer=n_layer,
+    )
     m = model.to(device)
     # print the number of parameters in the model
     print(sum(p.numel() for p in m.parameters()), 'parameters')
