@@ -76,7 +76,7 @@ class Head(nn.Module):
         return out
     
 
-class MultiHeadAttention():
+class MultiHeadAttention(nn.Module):
     """ multiple heads of self-attention in parallel """
     def __init__(self, num_heads, head_size):
         super().__init__()
@@ -88,6 +88,21 @@ class MultiHeadAttention():
         out = torch.cat([h(x) for h in self.heads], dim=-1)
         out = self.dropout(self.proj(out))
         return out
+    
+
+class FeedFoward(nn.Module):
+    """ a simple linear layer followed by a non-linearity """
+    def __init__(self, n_embd):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(n_embd, 4*n_embd),
+            nn.ReLU(),
+            nn.Linear(4*n_embd, n_embd),
+            nn.Dropout(droput),
+        )
+    
+    def forward(self, x):
+        return self.net(x)
 
 
 class LanguageModel(nn.Module):
