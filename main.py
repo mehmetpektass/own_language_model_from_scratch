@@ -6,14 +6,14 @@ import pickle
 #parameters
 batch_size = 64
 block_size = 256
-max_iters = 1000
-eval_interval = 200
+max_iters = 2000
+eval_interval = 400
 learning_rate = 3e-4
 device = "cuda" if torch.cuda.is_available() else "cpu"
 eval_iters = 100
 n_embd = 384
-n_head = 3
-n_layer = 3
+n_head = 4
+n_layer = 4
 dropout = 0.2
 
 
@@ -43,7 +43,7 @@ test_data = data[n:]
 #get data
 def get_batch(split):
     data = train_data if split =='train' else test_data
-    ix = torch.randint(len(data) - block_size, (batch_size))
+    ix = torch.randint(len(data) - block_size, (batch_size,))
     x = torch.stack([data[i: i+block_size] for i in ix])
     y = torch.stack([data[i+1: i+block_size+1] for i in ix])
     x,y = x.to(device), y.to(device)
@@ -128,7 +128,7 @@ class LanguageModel(nn.Module):
         """
         Initializes all the necessary layers and modules for the language model.
         """
-        super().__init()
+        super().__init__()
         self.token_embedding_table = nn.Embedding(vocab_size, n_embd)
         self.position_embedding_table = nn.Embedding(block_size, n_embd)
         self.blocks = nn.Sequential(*[Block(n_embd, n_head) for _ in range(n_layer)])
